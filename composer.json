@@ -3,7 +3,7 @@
     "type": "laravel-package",
     "autoload": {
         "psr-4": {
-            "Kai\\ChromeDevTools\\": "src/"
+            "ChromeDevTools\\": "src/"
         }
     },
     "authors": [
@@ -20,7 +20,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Kai\\ChromeDevTools\\ChromeDevToolsServiceProvider"
+                "ChromeDevTools\\ChromeDevToolsServiceProvider"
             ]
         }
     },

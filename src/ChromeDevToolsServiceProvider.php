@@ -1,9 +1,9 @@
 <?php
 
-namespace Kai\ChromeDevTools;
+namespace ChromeDevTools;
 
 use Illuminate\Support\ServiceProvider;
-use Kai\ChromeDevTools\Services\ChromeDevTools;
+use ChromeDevTools\Services\ChromeDevTools;
 
 class ChromeDevToolsServiceProvider extends ServiceProvider
 {

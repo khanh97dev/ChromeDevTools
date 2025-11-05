@@ -1,6 +1,6 @@
 <?php
 
-namespace Kai\ChromeDevTools\Services;
+namespace ChromeDevTools\Services;
 
 use BadMethodCallException;
 use WebSocket\Client;
