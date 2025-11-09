@@ -1,5 +1,5 @@
 {
-    "name": "kai/chromedevtools",
+    "name": "kai/ChromeDevTools",
     "type": "laravel-package",
     "autoload": {
         "psr-4": {
