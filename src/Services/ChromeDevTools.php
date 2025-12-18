@@ -39,11 +39,19 @@ class ChromeDevTools
     {
         $httpUrl = rtrim($httpUrl, '/');
         
-        // Sử dụng file_get_contents để lấy JSON
-        $response = @file_get_contents("$httpUrl/json/version");
+        // Sử dụng cURL để lấy JSON
+        $ch = curl_init("$httpUrl/json/version");
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
         
-        if ($response === false) {
-            throw new \RuntimeException("Cannot connect to Chrome DevTools at $httpUrl");
+        $response = curl_exec($ch);
+        $error = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($response === false || $httpCode !== 200) {
+            throw new \RuntimeException("Cannot connect to Chrome DevTools at $httpUrl: $error");
         }
         
         $data = json_decode($response, true);
