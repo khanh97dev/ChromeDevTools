@@ -157,10 +157,11 @@ class ChromeDevTools
     /**
      * Evaluate arbitrary JavaScript in the page.
      */
-    public function evaluate(string $expression)
+    public function evaluate(string $expression, bool $returnByValue = true)
     {
         $resp = $this->sendCommand('Runtime.evaluate', [
-            'expression' => $expression
+            'expression' => $expression,
+            'returnByValue' => $returnByValue
         ]);
         return $resp['result']['result']['value'] ?? null;
     }
