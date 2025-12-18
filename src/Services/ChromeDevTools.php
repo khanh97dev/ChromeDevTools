@@ -4,7 +4,6 @@ namespace ChromeDevTools\Services;
 
 use BadMethodCallException;
 use WebSocket\Client;
-use WebSocket\ConnectionException;
 
 class ChromeDevTools
 {
@@ -14,24 +13,46 @@ class ChromeDevTools
     public string $targetId = '';
     public $log;
 
-    public function __construct(string $wsUrl, $timeout = 15)
-    {
-        // Define logging closure to use the package's internal Helper::stdout
-        $this->log = function (string $msg) {
-            fwrite(STDERR, $msg);
-        };
 
-        try {
-            $this->client = new Client($wsUrl, [
-                'timeout' => $timeout
-            ]);
-        } catch (ConnectionException $e) {
-            ($this->log)("WebSocket connection failed: " . $e->getMessage());
-            throw $e;
-        } catch (\Exception $e) {
-            ($this->log)("Unexpected error during WebSocket setup: " . $e->getMessage());
-            throw $e;
+    public function __construct(string $url, $timeout = 15)
+    {
+        // Nếu là HTTP URL, tự động lấy WebSocket URL
+        if (str_starts_with($url, 'http://')) {
+            $wsUrl = $this->getWebSocketUrl($url);
+        } else {
+            $wsUrl = $url;
         }
+
+        $this->client = new Client($wsUrl, [
+            'timeout' => $timeout // 15s default
+        ]);
+
+        $this->log = function (string $msg) {
+            fwrite(STDOUT, $msg);
+        };
+    }
+
+    /**
+     * Lấy WebSocket URL từ HTTP endpoint
+     */
+    protected function getWebSocketUrl(string $httpUrl): string
+    {
+        $httpUrl = rtrim($httpUrl, '/');
+        
+        // Sử dụng file_get_contents để lấy JSON
+        $response = @file_get_contents("$httpUrl/json/version");
+        
+        if ($response === false) {
+            throw new \RuntimeException("Cannot connect to Chrome DevTools at $httpUrl");
+        }
+        
+        $data = json_decode($response, true);
+        
+        if (!isset($data['webSocketDebuggerUrl'])) {
+            throw new \RuntimeException("WebSocket URL not found in response");
+        }
+        
+        return $data['webSocketDebuggerUrl'];
     }
 
     public function __call($name, $arguments)
@@ -43,6 +64,11 @@ class ChromeDevTools
         throw new BadMethodCallException("Method $name does not exist.");
     }
 
+
+
+    /**
+     * Send a CDP command and wait for the matching response.
+     */
     protected function sendCommand(string $method, array $params = [], bool $needsSession = true): array
     {
         $id = $this->nextId++;
@@ -58,40 +84,37 @@ class ChromeDevTools
         }
 
         $json = json_encode($message);
-        ($this->log)(">>> Sending: {$json}\n");
+        // log to stdout
+        $this->log(">>> Sending: {$json}\n");
 
-        try {
-            $this->client->send($json);
-        } catch (ConnectionException $e) {
-            ($this->log)("Send failed: " . $e->getMessage());
-            throw $e;
-        }
+        $this->client->send($json);
 
         while (true) {
-            try {
-                $raw = $this->client->receive();
-            } catch (ConnectionException $e) {
-                ($this->log)("Receive failed: " . $e->getMessage());
-                throw $e;
-            }
+            $raw = $this->client->receive();
+            // log every incoming message
+            $this->log("<<< Received: {$raw}\n");
 
-            ($this->log)("<<< Received: {$raw}\n");
             $msg = json_decode($raw, true);
 
+            // Response to our command
             if (isset($msg['id']) && $msg['id'] === $id) {
                 return $msg;
             }
 
-            // Handle incoming events that are not responses to the current command
+            // Handle events
             if (isset($msg['method'])) {
                 if ($msg['method'] === 'Target.attachedToTarget' && isset($msg['params']['sessionId'])) {
                     $this->sessionId = $msg['params']['sessionId'];
-                    ($this->log)(">>> Updated sessionId: {$this->sessionId}\n");
+                    $this->log(">>> Updated sessionId: {$this->sessionId}\n");
                 }
             }
         }
     }
 
+
+    /**
+     * Create a new tab and attach to it.
+     */
     public function createTarget(string $url): string
     {
         $resp = $this->sendCommand('Target.createTarget', ['url' => $url], false);
@@ -107,11 +130,14 @@ class ChromeDevTools
         return $this->targetId;
     }
 
+    /**
+     * Navigate to a URL and wait for load.
+     */
     public function navigate(string $url): void
     {
         $this->sendCommand('Page.navigate', ['url' => $url]);
 
-        // Wait for the load event fired
+        // Wait for load event
         while (true) {
             $msg = json_decode($this->client->receive(), true);
             if (isset($msg['method']) && $msg['method'] === 'Page.loadEventFired') {
@@ -120,6 +146,9 @@ class ChromeDevTools
         }
     }
 
+    /**
+     * Evaluate arbitrary JavaScript in the page.
+     */
     public function evaluate(string $expression)
     {
         $resp = $this->sendCommand('Runtime.evaluate', [
@@ -128,11 +157,17 @@ class ChromeDevTools
         return $resp['result']['result']['value'] ?? null;
     }
 
+    /**
+     * Get the page title.
+     */
     public function getTitle(): string
     {
         return $this->evaluate('document.title') ?? '(no title)';
     }
 
+    /**
+     * Get the current page URL.
+     */
     public function getUrl(): ?string
     {
         $resp = $this->sendCommand('Runtime.evaluate', [
@@ -142,6 +177,9 @@ class ChromeDevTools
         return $resp['result']['result']['value'] ?? null;
     }
 
+    /**
+     * Click an element by CSS selector.
+     */
     public function clickSelector(string $selector): void
     {
         $this->evaluate("document.querySelector(" . json_encode($selector) . ")?.click()");
@@ -160,18 +198,22 @@ class ChromeDevTools
 
     public function typeText(string $text, int $delayMs = 70): void
     {
+        // Loop through each character
         $chars = preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY);
 
         foreach ($chars as $char) {
             $this->sendCommand('Input.insertText', [
                 'text' => $char
             ]);
-            usleep($delayMs * 1000);
+
+            // Delay between keystrokes
+            usleep($delayMs * 1000); // convert ms to microseconds
         }
     }
 
     public function pressEnter(): void
     {
+        // KeyDown
         $this->sendCommand('Input.dispatchKeyEvent', [
             'type' => 'keyDown',
             'key' => 'Enter',
@@ -180,6 +222,7 @@ class ChromeDevTools
             'nativeVirtualKeyCode' => 13
         ]);
 
+        // KeyUp
         $this->sendCommand('Input.dispatchKeyEvent', [
             'type' => 'keyUp',
             'key' => 'Enter',
@@ -189,13 +232,17 @@ class ChromeDevTools
         ]);
     }
 
+    /**
+     * Find an element by CSS selector.
+     * Returns null if not found, or a string (outerHTML) if found.
+     */
     public function findBySelector(string $selector): ?string
     {
         $js = sprintf(
             "(() => {
-                const el = document.querySelector(%s);
-                return el ? el.outerHTML : null;
-            })()",
+            const el = document.querySelector(%s);
+            return el ? el.outerHTML : null;
+        })()",
             json_encode($selector)
         );
 
@@ -203,11 +250,14 @@ class ChromeDevTools
         return $result !== null ? (string) $result : null;
     }
 
+    /**
+     * Wait until the page has finished loading.
+     */
     public function waitLoading(): void
     {
         while (true) {
             $raw = $this->client->receive();
-            ($this->log)("<<< Event while waiting: {$raw}\n");
+            $this->log("<<< Event while waiting: {$raw}\n");
 
             $msg = json_decode($raw, true);
             if (isset($msg['method']) && $msg['method'] === 'Page.loadEventFired') {
@@ -216,6 +266,9 @@ class ChromeDevTools
         }
     }
 
+    /**
+     * Close the current tab.
+     */
     public function closePage(): void
     {
         $this->sendCommand('Target.closeTarget', [
@@ -223,11 +276,17 @@ class ChromeDevTools
         ], false);
     }
 
+    /**
+     * Close the entire browser.
+     */
     public function closeBrowser(): void
     {
         $this->sendCommand('Browser.close', [], false);
     }
 
+    /**
+     * Close the WebSocket connection.
+     */
     public function close(): void
     {
         $this->client->close();
