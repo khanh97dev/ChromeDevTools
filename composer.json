@@ -17,13 +17,6 @@
         "illuminate/support": "^10.0 || ^11.0",
         "textalk/websocket": "^1.2"
     },
-    "extra": {
-        "laravel": {
-            "providers": [
-                "ChromeDevTools\\ChromeDevToolsServiceProvider"
-            ]
-        }
-    },
     "minimum-stability": "dev",
     "prefer-stable": true
 }
