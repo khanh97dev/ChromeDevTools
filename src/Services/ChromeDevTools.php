@@ -13,7 +13,6 @@ class ChromeDevTools
     public string $targetId = '';
     public $log;
 
-
     public function __construct(string $url, $timeout = 15)
     {
         // Nếu là HTTP URL, tự động lấy WebSocket URL
@@ -38,28 +37,28 @@ class ChromeDevTools
     protected function getWebSocketUrl(string $httpUrl): string
     {
         $httpUrl = rtrim($httpUrl, '/');
-        
+
         // Sử dụng cURL để lấy JSON
         $ch = curl_init("$httpUrl/json/version");
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_TIMEOUT, 10);
         curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-        
+
         $response = curl_exec($ch);
         $error = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
-        
+
         if ($response === false || $httpCode !== 200) {
             throw new \RuntimeException("Cannot connect to Chrome DevTools at $httpUrl: $error");
         }
-        
+
         $data = json_decode($response, true);
-        
+
         if (!isset($data['webSocketDebuggerUrl'])) {
             throw new \RuntimeException("WebSocket URL not found in response");
         }
-        
+
         return $data['webSocketDebuggerUrl'];
     }
 
@@ -275,6 +274,35 @@ class ChromeDevTools
         }
     }
 
+
+    public function waitSelector(string $selector, int $timeoutMs = 30000, int $pollIntervalMs = 100): bool
+    {
+        $startTime = microtime(true) * 1000; // Convert to milliseconds
+
+        $this->log(">>> Waiting for selector: {$selector} (timeout: {$timeoutMs}ms)\n");
+
+        while (true) {
+            $exists = $this->evaluate(
+                "!!document.querySelector(" . json_encode($selector) . ")"
+            );
+
+            if ($exists) {
+                $elapsed = (microtime(true) * 1000) - $startTime;
+                $this->log(">>> Selector found after {$elapsed}ms\n");
+                return true;
+            }
+
+            $elapsed = (microtime(true) * 1000) - $startTime;
+
+            if ($elapsed >= $timeoutMs) {
+                $this->log(">>> Timeout waiting for selector: {$selector}\n");
+                throw new \RuntimeException("Timeout waiting for selector: {$selector} after {$timeoutMs}ms");
+            }
+
+            usleep($pollIntervalMs * 1000); // Convert ms to microseconds
+        }
+    }
+    
     /**
      * Close the current tab.
      */
