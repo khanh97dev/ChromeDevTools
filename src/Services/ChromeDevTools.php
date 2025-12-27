@@ -164,6 +164,29 @@ class ChromeDevTools
         ]);
         return $resp['result']['result']['value'] ?? null;
     }
+    /**
+     * Evaluate async JavaScript and wait for Promise to resolve
+     */
+    public function evaluateAsync(string $expression, int $timeoutMs = 30000)
+    {
+        // Wrap expression in async IIFE and await it
+        $wrappedExpression = "(async () => { return await ({$expression}); })()";
+        
+        $resp = $this->sendCommand('Runtime.evaluate', [
+            'expression' => $wrappedExpression,
+            'awaitPromise' => true,  // ← Quan trọng!
+            'returnByValue' => true,
+            'timeout' => $timeoutMs
+        ]);
+        
+        if (isset($resp['result']['exceptionDetails'])) {
+            throw new \RuntimeException(
+                'JavaScript error: ' . json_encode($resp['result']['exceptionDetails'])
+            );
+        }
+        
+        return $resp['result']['result']['value'] ?? null;
+    }
 
     /**
      * Get the page title.
