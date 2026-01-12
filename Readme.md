@@ -9,5 +9,5 @@ composer.json
 ```
 cmd
 ```
-compose require kai/chromedevtools:dev-main
+compose require khanh97dev/chromedevtools:dev-main
 ```
