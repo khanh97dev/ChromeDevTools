@@ -14,7 +14,7 @@
     ],
     "require": {
         "php": "^8.2",
-        "illuminate/support": "^10.0 || ^11.0",
+        "illuminate/support": "^9.0 || ^10.0 || ^11.0",
         "textalk/websocket": "^1.2"
     },
     "minimum-stability": "dev",
